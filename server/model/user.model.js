@@ -6,13 +6,16 @@ const userSchema = new mongoose.Schema({
     blog: String,
     location: String,
     followers: Number,
-    following: Number,
+    following: Number, 
     public_repos: Number,
-    public_gists: Number,
-    created_at: Date,
-    updated_at: Date,
-    deleted: { type: Boolean, default: false }, 
+    public_gists: Number, 
+    friends: { type: [String], default: [] },
+ // friends: { type: [String], default: [] },
+    isDeleted: { type: Boolean, default: false }, 
 }, { timestamps: true });  
 
 const User = mongoose.model("User", userSchema);
 export default User;
+
+
+ 

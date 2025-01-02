@@ -16,4 +16,5 @@ app.use("/api/v1/user",userRoute);
 
 app.use(errorMiddleware);
 connectDb();
-app.listen(3001,()=>console.log("Listening to port 3000"));
+const PORT = process.env.PORT_NUMBER || 3001;
+app.listen(PORT,()=>console.log("Listening to port ",PORT));

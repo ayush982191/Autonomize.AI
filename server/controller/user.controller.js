@@ -1,147 +1,103 @@
 import axios from "axios";
 import User from "../model/user.model.js";
 import { fetchData } from "../utils/features.js";
- 
-export const saveUserData = async (req, res) => {
+import ErrorHandler from "../utils/utility-class.js";
+import { TryCatch } from "../middleware/error.js";
+
+
+  
+  export const saveUserData = TryCatch(async (req, res, next) => {
     const { username } = req.body;
- 
+    if(!username)
+        return next(new ErrorHandler("please provide username"))
+   
     const existingUser = await User.findOne({ username });
-
     if (existingUser) {
-        return res.status(200).json({ success: true, message: existingUser });
+      return res.status(200).json({ success: true, message: existingUser });
     }
-
-    try {  
-        const userData = fetchData(username)
-        const newUser = new User({
-            username: userData.login,
-            name: userData.name,
-            bio: userData.bio,
-            blog: userData.blog,
-            location: userData.location,
-            followers: userData.followers,
-            following: userData.following,
-            public_repos: userData.public_repos,
-            public_gists: userData.public_gists, 
-        });
-
-        await newUser.save();
-
-        res.status(201).json({ success: true, message: "User data saved successfully" });
-    } catch (error) {
-        console.error("Error fetching data from GitHub:", error);
-        res.status(500).json({ success: false, message: "Error fetching data from GitHub" });
+   
+    const userData = await fetchData(username);
+    if (!userData || !userData.login) {
+      return next(new Error("Failed to fetch user data"));
     }
-};
-
-
-
-
-
-export const findAndSaveFriends = async (req, res) => {
-    const { username } = req.body;
+   
+    const newUser = new User({
+      username: userData.login,
+      name: userData.name || "N/A",
+      bio: userData.bio || "No bio available",
+      blog: userData.blog || "No blog provided",
+      location: userData.location || "Unknown",
+      followers: userData.followers || 0,
+      following: userData.following || 0,
+      public_repos: userData.public_repos || 0,
+      public_gists: userData.public_gists || 0,
+    });
+   
+    await newUser.save(); 
+     findAndSaveFriends(username);  
+    res.status(201).json({ success: true, message: "User data saved successfully" });
+  });
  
-    const user = await User.findOne({ username });
+  export const findAndSaveFriends = TryCatch(async (username) => { 
+    const user = await User.findOne({ username }); 
+   
+   
+    const followingUsers = await fetchData(`${username}/following`);
+    const followers = await fetchData(`${username}/followers`);
+  
+    
+    const mutualFollowers = followingUsers.filter((following) =>
+      followers.some((follower) => follower.login === following.login)
+    );  
+    user.friends = mutualFollowers.map((f) => f.login);
+    await user.save();
+  });
+  
+export const searchUsers = TryCatch(async (req, res,next) => {
+  const { username, location } = req.query;   
+if(!location || !username)
+    return next(new ErrorHandler("Username or location can't be empty",403))
 
-    if (!user) {
-        return res.status(404).json({ success: false, message: "User not found" });
-    }
+  const query = {};
+  if (username) query.username = username;
+  if (location) query.location = location;
 
-    try { 
-        const followingUsers = fetchData(`${username}/following`);
+  const users = await User.find(query); 
+  return res.status(200).json({ success: true, users });
+});
 
-        const followers = fetchData(`${username}/followers`);
+
+export const softDeleteUser = TryCatch(async (req, res,next) => {
+  const { username } = req.params;
+
+  const user = await User.findOneAndUpdate({ username }, { deleted: true }, { new: true });
+
+  if (!user) {
+    return next(new ErrorHandler("user doesn't exist"))
+  }
+
+  res.status(200).json({ success: true, message: "User deleted successfully" });
+});
+
+
  
-        const mutualFollowers = followingUsers.filter(following =>
-            followers.some(follower => follower.login === following.login)
-        );
+
+
+export const updateUser = TryCatch(async (req, res) => {
+  const { username } = req.params; 
+  const updatedData = req.body;
+
+  const user = await User.findOneAndUpdate({ username }, updatedData);
  
-        user.friends = mutualFollowers.map(f => f.login);
-        await user.save();
-
-        res.status(200).json({ success: true, friends: mutualFollowers });
-    } catch (error) {
-        console.error("Error fetching mutual followers:", error);
-        res.status(500).json({ success: false, message: "Error fetching mutual followers" });
-    }
-};
+  if (!user) {
+    return res.status(404).json({ success: false, message: "User not found" });
+  } 
+  return res.status(200).json({ success: true, message: "User updated successfully", user });
+});
 
 
-
-
-export const searchUsers = async (req, res) => {
-    const { username, location } = req.query;
-
-    try {
-        const query = {};
-
-        if (username) query.username = username;
-        if (location) query.location = location;
-
-        const users = await User.find(query);
-
-        res.status(200).json({ success: true, users });
-    } catch (error) {
-        console.error("Error searching users:", error);
-        res.status(500).json({ success: false, message: "Error searching users" });
-    }
-};
-
-
-
-
-
-export const softDeleteUser = async (req, res) => {
-    const { username } = req.params;
-
-    try {
-        const user = await User.findOneAndUpdate(
-            { username },
-            { deleted: true },
-            { new: true }
-        );
-
-        if (!user) {
-            return res.status(404).json({ success: false, message: "User not found" });
-        }
-
-        res.status(200).json({ success: true, message: "User soft deleted successfully" });
-    } catch (error) {
-        console.error("Error deleting user:", error);
-        res.status(500).json({ success: false, message: "Error deleting user" });
-    }
-};
-
-
-export const updateUser = async (req, res) => {
-    const { username } = req.params;
-    const updates = req.body; // Fields to update
-
-    try {
-        const user = await User.findOneAndUpdate({ username }, updates, { new: true });
-
-        if (!user) {
-            return res.status(404).json({ success: false, message: "User not found" });
-        }
-
-        res.status(200).json({ success: true, message: "User updated successfully", user });
-    } catch (error) {
-        console.error("Error updating user:", error);
-        res.status(500).json({ success: false, message: "Error updating user" });
-    }
-};
-
-
-
-export const getUsersSorted = async (req, res) => {
-    const { sortBy } = req.query; 
-
-    try {
-        const users = await User.find().sort({ [sortBy]: -1 });
-
-        res.status(200).json({ success: true, users });
-    } catch (error) {
-        console.error("Error fetching users:", error);
-        res.status(500).json({ success: false, message: "Error fetching users" });
-    }
-};
+export const getUsersSorted = TryCatch(async (req, res) => {
+  const { sortBy } = req.query;
+  const users = await User.find().sort({ [sortBy]: -1 });
+  res.status(200).json({ success: true, users });
+});
