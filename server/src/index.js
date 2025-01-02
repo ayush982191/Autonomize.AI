@@ -11,7 +11,7 @@ app.use(express.json());;
 app.use(cookieParser())
 
 
-app.get("/",(req,res)=>res.send("Welcome to Home page"));
+app.get("/home",(req,res)=>res.send("Welcome to Home page"));
 app.use("/api/v1/user",userRoute);
 
 app.use(errorMiddleware);
